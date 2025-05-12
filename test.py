@@ -9,7 +9,7 @@ app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
 
 app.layout = html.Div([
-    html.H1('Hello World'),
+    html.H1('Minos Biosciences: What You See Is What You Seq'),
     dcc.Dropdown(['LA', 'NYC', 'MTL'],
         'LA',
         id='dropdown'
