@@ -16,8 +16,8 @@ from plotly.subplots import make_subplots
 from dash.dependencies import Input, Output
 
 # Setting paths and specific module imports
-from config import resources_repo_path, title
-sys.path.insert(0, f"{resources_repo_path}Scripts")
+# from config import resources_repo_path, title
+# sys.path.insert(0, f"{resources_repo_path}Scripts")
 #from global_variables import samples, bigbi_path, human_color, mouse_color, grey_color, cell_type_colors, ggyor_colors, Minos_dark_color, Minos_light_color
 
 # Global_variables variables
@@ -81,7 +81,7 @@ for sample in samples_list:
 #############################################################
 
 app.layout = html.Div([
-    dbc.Row(dbc.Col(html.H1(id="H1", children=f"{title}: Minos coupled datasets explorer", className="app-header--title"))),
+    dbc.Row(dbc.Col(html.H1(id="H1", children=f"MinoScreen: Minos coupled datasets explorer", className="app-header--title"))),
 
     # Sample selector (dropdown)
     dbc.Row(dbc.Col(dcc.Dropdown(id="dropdown", style={"width": "330px"}, options=samples_dropdown, value=selected_sample), width=4), justify="center", className="mb-4"),
