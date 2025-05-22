@@ -2,7 +2,6 @@ import os
 import sys
 import glob
 from collections import OrderedDict
-import argparse
 import numpy as np
 import pandas as pd
 import dash
@@ -281,11 +280,14 @@ def update_cell_fluo_pairplot(dropdown_value):
     return fig
 
 
-# Managing command-line arguments
-parser = argparse.ArgumentParser()
-parser.add_argument("--port", dest="port", type=int, default=8050, help="Port number to display on.")
-args = parser.parse_args()
-
 if __name__ == '__main__':
+    import argparse
+
+    # Managing command-line arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", dest="port", type=int, default=8050, help="Port number to display on.")
+    # args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+
     # app.run_server(debug=True, port=args.port)
     app.run(debug=True, port=args.port)
