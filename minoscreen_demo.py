@@ -283,13 +283,12 @@ def update_cell_fluo_pairplot(dropdown_value):
 
 
 if __name__ == '__main__':
-    import argparse
+    import argparse  # Fixed a bug with gunicorn
 
     # Managing command-line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", dest="port", type=int, default=8050, help="Port number to display on.")
-    # args = parser.parse_args()
-    args, unknown = parser.parse_known_args()
+    args = parser.parse_args()
+    # args, unknown = parser.parse_known_args()  # Fixed a bug with gunicorn
 
-    # app.run_server(debug=True, port=args.port)
     app.run(debug=True, port=args.port)
