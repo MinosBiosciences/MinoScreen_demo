@@ -53,12 +53,10 @@ def get_single_cells(chip_ID: str):
         single_cell_cages = df_cages[df_cages['Cell_Count_Cage'] == 1]['Cage_ID'].tolist()
         df_cells_filtered = df_cells_filtered[df_cells_filtered['Cage_ID'].isin(single_cell_cages)]
 
-        # Use the filtered dataframe for the rest of the function
-        df = df_cells_filtered
     except Exception as e:
         print(f"Error loading or processing files: {e}")
         return {}
-    return df
+    return df_cells_filtered
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
