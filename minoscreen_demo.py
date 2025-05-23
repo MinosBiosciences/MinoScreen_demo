@@ -39,19 +39,16 @@ bigbi_path = "assets/Minos_space/"
 def get_single_cells(chip_ID: str):
     try:
         # Load ref cells file
-        cells_file = os.path.join(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_data/{chip_ID}.20X.T0.cells.tsv")
+        cells_file = f"assets/Minos_space/Chips/Chip{chip_ID}/{chip_ID}_data/{chip_ID}.20X.T0.cells.tsv"
         df_cells = pd.read_table(cells_file)
 
         # Load ref cages file
         cages_file = os.path.join(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_data/{chip_ID}.20X.T0.cages.tsv")
         df_cages = pd.read_table(cages_file)
 
-        # Filter cells file to only include rows where Cell_Index_Global equals Unique_Cell (ref cell version for redundant ones)
-        df_cells_filtered = df_cells[df_cells['Cell_Index_Global'] == df_cells['Unique_Cell']]
-
         # Filter cells file further to only include rows where the Cage_ID in the cage file has Cell_Count_Cage with a value of 1 (single-cell cages)
         single_cell_cages = df_cages[df_cages['Cell_Count_Cage'] == 1]['Cage_ID'].tolist()
-        df_cells_filtered = df_cells_filtered[df_cells_filtered['Cage_ID'].isin(single_cell_cages)]
+        df_cells_filtered = df_cells[df_cells['Cage_ID'].isin(single_cell_cages)]
 
     except Exception as e:
         print(f"Error loading or processing files: {e}")
@@ -201,9 +198,10 @@ def update_cell_pie_chart(selected_sample):
 
     # Computing the cell type count for each type
     type_list = ["H_Ramos", "M_B3Z", "Undetermined"]
+    colors = [cell_type_colors[cell_type] for cell_type in type_list]
     cell_type_count = [len(df_sc.query("Cell_Type==@kind")) for kind in type_list]
     fig = go.Figure(data=[go.Pie(values=cell_type_count, labels=type_list, textinfo='label+percent', hole=0.5)])
-    fig.update_traces(marker=dict(colors=type_list, line=dict(color="black", width=2)))
+    fig.update_traces(marker=dict(colors=colors, line=dict(color="black", width=2)))
 
     fig.update_layout(
         # title_text=f"Chip {chip_ID}: Cell type repartition",
@@ -237,7 +235,7 @@ def update_cell_pie_chart(selected_sample):
 
 @app.callback(Output("cell_fluo_intensity_pairplot", "figure"),
               [Input("dropdown", component_property="value")])
-def update_cell_fluo_pairplot(dropdown_value):
+def update_cell_fluo_pairplot(selected_sample):
     # Extract chip_ID from the selected sample value
     parts = selected_sample.replace("Chip", "").split("_")
     chip_ID = parts[0]
@@ -254,7 +252,7 @@ def update_cell_fluo_pairplot(dropdown_value):
     # log transformation
     df_sc.loc[:, intensity_cols] = np.log10(df_sc.loc[:, intensity_cols])
     # Get all cols
-    all_cols = intensity_cols + ["Cage_ID", "Cell_Type", "X_Cell_Center_Global", "Y_Cell_Center_Global", "X_Cell_Center_Local", "Y_Cell_Center_Local"]
+    all_cols = intensity_cols + ["Cage_ID", "Cell_Type"]
     fig = px.scatter_matrix(df_sc[all_cols], opacity=0.45, dimensions=intensity_cols, color="Cell_Type", color_discrete_map=cell_type_colors)
 
     fig.update_traces(showupperhalf=False)
