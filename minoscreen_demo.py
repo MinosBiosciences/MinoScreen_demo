@@ -39,7 +39,7 @@ bigbi_path = "assets/Minos_space/"
 def get_single_cells(chip_ID: str):
     try:
         # Load ref cells file
-        cells_file = f"assets/Minos_space/Chips/Chip{chip_ID}/{chip_ID}_data/{chip_ID}.20X.T0.cells.tsv"
+        cells_file = f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_data/{chip_ID}.20X.T0.cells.tsv"
         df_cells = pd.read_table(cells_file)
 
         # Load ref cages file
@@ -93,7 +93,7 @@ app.layout = html.Div([
         # Two cell crops grids side by side on the right
         dbc.Col(html.Div([
             html.H3("Example cell crops"),
-            html.Div(id="cells_per_cage_spatial")]), width=8)
+            html.Div(id="cell_crops_grids")]), width=8)
     ]),
 
     # Second row
@@ -171,13 +171,15 @@ def update_sample_table(selected_sample):
     )
 
 # Cell crops grids callback
-@app.callback(Output("cells_per_cage_spatial", "children"),
+@app.callback(Output("cell_crops_grids", "children"),
               [Input("dropdown", "value")])
 def update_cells_per_cage(selected_sample):
     parts = selected_sample.replace("Chip", "").split("_")
     chip_ID = parts[0]
-    grid_path_Cy5 = glob.glob(f"assets/Minos_space/Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC-_Cy5+.RGB.best.tif")[0]
-    grid_path_FITC = glob.glob(f"assets/Minos_space/Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC+_Cy5-.RGB.best.tif")[0]
+    # grid_path_Cy5 = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC-_Cy5+.RGB.best.tif")[0]
+    grid_path_Cy5 = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC-_Cy5+.RGB.best.png")[0]
+    # grid_path_FITC = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC+_Cy5-.RGB.best.tif")[0]
+    grid_path_FITC = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC+_Cy5-.RGB.best.png")[0]
     return [html.Div([html.Img(id="image1", src=app.get_asset_url(grid_path_Cy5.lstrip("assets/")), alt="mesc", style={"width": "100%", "height": "auto", "border": "1px solid #ddd"}),
                       html.P("Human cells (Cy5 marker)")], style={"width": "48%", "display": "inline-block", "marginRight": "4%"}),
             html.Div([html.Img(id="image2", src=app.get_asset_url(grid_path_FITC.lstrip("assets/")), style={"width": "100%", "height": "auto", "border": "1px solid #ddd"}),
