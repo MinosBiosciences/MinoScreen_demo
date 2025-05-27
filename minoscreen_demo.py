@@ -60,8 +60,8 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
 # Hardcoded samples
-samples_list = ["Chip204_M049-PoC79", "Chip206_M050-PoC80"]
-selected_sample = samples_list[0]  # Default to first sample
+samples_list = ["Chip204_M049-PoC79", "Chip206_M051-PoC80"]
+selected_sample = samples_list[1]  # Default to first sample
 
 # Creating dropdown options
 samples_dropdown = []
