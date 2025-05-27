@@ -124,21 +124,22 @@ app.layout = html.Div([
 @app.callback(Output("sample_data_table", "children"),
               [Input("dropdown", "value")])
 def update_sample_table(selected_sample):
-    # Create a template table with the specified structure
-    # This is just a placeholder - you'll fill this with actual data
-    df = pd.DataFrame({
-        selected_sample: ['Cage count', 'Global UMI count', 'Median cage UMI count', 'Global unique gene count', 'Median cage unique gene count'],
-        'All single-cell cages': ['', '', '', '', ''],
-        'Human single-cell cages': ['', '', '', '', ''],
-        'Murine single-cell cages': ['', '', '', '', '']
-    })
+    # Extract chip_ID and seq_ID from the format the selected sample
+    parts = selected_sample.replace("Chip", "").split("_")
+    chip_ID = parts[0]
+    seq_ID = parts[1]
+    # Read the TSV file
+    df = pd.read_csv(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.MinoScreen_info.tsv", sep='\t')
+    # Rename the first column (which has an empty or 'Unnamed: 0' header) to selected sample
+    first_col_name = df.columns[0]  # Get the name of the first column
+    df = df.rename(columns={first_col_name: selected_sample})
 
     return html.Div(
         [dash.dash_table.DataTable(
             df.to_dict('records'),
             [{"name": i, "id": i} for i in df.columns],
             style_cell={
-                'padding': "5px", 
+                'padding': "5px",
                 "font-family": "Avenir",
                 'maxWidth': '100px',  # Set maximum width for all columns
                 'overflow': 'hidden',
@@ -148,7 +149,10 @@ def update_sample_table(selected_sample):
             style_header={"fontWeight": "bold"},
             style_data_conditional=[
                 {'if': {'row_index': 'odd'},
-                 'backgroundColor': 'rgb(245, 245, 245)'}
+                 'backgroundColor': 'rgb(245, 245, 245)'},
+                # Make first column bold
+                {'if': {'column_id': selected_sample},
+                 'fontWeight': 'bold'}
             ],
             # Style the first column as a header
             style_cell_conditional=[
