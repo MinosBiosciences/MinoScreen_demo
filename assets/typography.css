@@ -1,0 +1,24 @@
+h1 {
+    color: #1E8BA5;
+    text-align: center;
+    margin-top: 10px;
+    margin-bottom: 30px;
+}
+
+h2, h3, h4, h5, h6 {
+    color: #3EABBD;
+    text-align: center;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    /*#background: #EAEAEA;*/
+}
+
+/* Info tables */
+.info_table {
+    padding: 10px;
+}
+
+.cells_info{
+    margin-left: 500px;
+    margin-right: 500px;
+}
