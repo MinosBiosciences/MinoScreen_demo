@@ -21,14 +21,18 @@ from dash.dependencies import Input, Output
 
 # Global_variables variables
 Minos_dark_color = "#1e8ba5"
-mouse_color = "#ff00ff"
-human_color = "#b1d700"
+# mouse_color = "#ff00ff"
+mouse_color = "#47d348"  # Temp modif
+# human_color = "#b1d700"
+human_color = "#dc4142"  # Temp modif
 grey_color = "#abb2b9"
 cell_type_colors = {"Human": human_color,
                     "H_Ramos": human_color,
+                    "Ramos_Human": human_color,
                     "human cell": human_color,  # TO BE REMOVED
                     "Mouse": mouse_color,
                     "M_B3Z": mouse_color,
+                    "B3Z_murine": mouse_color,
                     "mouse cell": mouse_color,  # TO BE REMOVED
                     "Undetermined": grey_color,
                     "undetermined": "#a9a9a9",  # TO BE REMOVED
@@ -227,9 +231,9 @@ def update_cells_per_cage(selected_sample):
     grid_path_Cy5 = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC-_Cy5+.RGB.best.png")[0]
     grid_path_FITC = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC+_Cy5-.RGB.best.png")[0]
     return [html.Div([html.Img(id="image1", src=app.get_asset_url(grid_path_Cy5.lstrip("assets/")), alt="mesc", style={"width": "100%", "height": "auto", "border": "1px solid #ddd"}),
-                      html.P("Human cells (Cy5 marker)")], style={"width": "48%", "display": "inline-block", "marginRight": "4%"}),
+                      html.P("Ramos cells (Human, Cy5 marker)")], style={"width": "48%", "display": "inline-block", "marginRight": "4%"}),
             html.Div([html.Img(id="image2", src=app.get_asset_url(grid_path_FITC.lstrip("assets/")), style={"width": "100%", "height": "auto", "border": "1px solid #ddd"}),
-                      html.P("Murine cells (FITC marker)")], style={"width": "48%", "display": "inline-block"})
+                      html.P("B3Z cells (murine, FITC marker)")], style={"width": "48%", "display": "inline-block"})
             ]
 
 # Cell type pie chart callback
@@ -242,9 +246,12 @@ def update_cell_pie_chart(selected_sample):
 
     # Keep onyl single cells in cages
     df_sc = get_single_cells(chip_ID)
+    df_sc.loc[df_sc.Cell_Type == "H_Ramos", "Cell_Type"] = "Ramos_Human"  # Temp modif
+    df_sc.loc[df_sc.Cell_Type == "M_B3Z", "Cell_Type"] = "B3Z_murine"  # Temp modif
 
     # Computing the cell type count for each type
-    type_list = ["H_Ramos", "M_B3Z", "Undetermined"]
+    # type_list = ["H_Ramos", "M_B3Z", "Undetermined"]
+    type_list = ["Ramos_Human", "B3Z_murine", "Undetermined"]
     colors = [cell_type_colors[cell_type] for cell_type in type_list]
     cell_type_count = [len(df_sc.query("Cell_Type==@kind")) for kind in type_list]
     fig = go.Figure(data=[go.Pie(values=cell_type_count, labels=type_list, textinfo='label+percent', hole=0.5)])
@@ -289,6 +296,8 @@ def update_cell_fluo_pairplot(selected_sample):
 
     # Keep onyl single cells in cages
     df_sc = get_single_cells(chip_ID)
+    df_sc.loc[df_sc.Cell_Type == "H_Ramos", "Cell_Type"] = "Ramos_Human"  # Temp modif
+    df_sc.loc[df_sc.Cell_Type == "M_B3Z", "Cell_Type"] = "B3Z_murine"  # Temp modif
 
     # Checking whether cell types were determined
     if "Cell_Type" not in df_sc.columns:
