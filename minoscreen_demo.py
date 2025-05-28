@@ -75,6 +75,29 @@ def get_cell_crop_path(chip_ID, cage_ID, mag, cells, channel):
         cell_path = ""
     return cell_path
 
+def get_top_correlated_pairs(corr_matrix, mode, n, thresh, feat_type):
+    # Get only selected feature type
+    if feat_type == "genes_genes":
+        corr_matrix = corr_matrix[(corr_matrix.Variable1_type == "Genes") & (corr_matrix.Variable2_type == "Genes")]
+    elif feat_type == "img_img":
+        corr_matrix = corr_matrix[(corr_matrix.Variable1_type.isin(["CP features"]) & corr_matrix.Variable2_type.isin(["DL features"])) | (corr_matrix.Variable1_type.isin(["DL features"]) & corr_matrix.Variable2_type.isin(["CP features"]))]
+    elif feat_type == "genes_img":
+        corr_matrix = corr_matrix[(corr_matrix.Variable1_type.isin(["CP features", "DL features"]) & corr_matrix.Variable2_type.isin(["Genes"])) | (corr_matrix.Variable1_type.isin(["Genes"]) & corr_matrix.Variable2_type.isin(["CP features", "DL features"]))]
+    # Get the top correlated pairs
+    if mode == "top_n":
+        positive_pairs = corr_matrix[corr_matrix['Correlation'] > 0].nlargest(n, 'Correlation')
+        negative_pairs = corr_matrix[corr_matrix['Correlation'] < 0].nsmallest(n, 'Correlation')
+    elif mode == "threshold":
+        positive_pairs = corr_matrix[(corr_matrix['Correlation'] > thresh)]
+        negative_pairs = corr_matrix[(corr_matrix['Correlation'] < -thresh)]
+    positive_pairs["CorrelationType"] = "Positive"
+    negative_pairs["CorrelationType"] = "Negative"
+    top_corr_pairs = pd.concat([positive_pairs, negative_pairs])
+    top_corr_pairs = top_corr_pairs.reset_index()
+
+    return top_corr_pairs.sort_values(by='Correlation', ascending=False)
+
+
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 server = app.server
@@ -141,20 +164,79 @@ app.layout = html.Div([
     ]),
 
     # Fourth row
+    # Image display on the center
+    dbc.Row(
+        dbc.Col(
+            html.Div([
+                html.H3("Cells display", className="text-center"),
+                html.Div(id="cell_display")
+            ]),
+            width=3
+        ),
+        justify="center",
+        style={"height": "120px"}
+    ),
+
+
+    # Fourth row
     dbc.Row([
         # Scatter plot UMI on the left
         dbc.Col(html.Div([
-            html.H3("Cells omics vs imaging"), dcc.Graph(id="scatterplot_UMI_sc", clear_on_unhover=True)
+            html.H3("Cells omics vs imaging"), dcc.Graph(id="scatterplot_UMI_sc", clear_on_unhover=True),
         ]), width=5),
-        # Image display on the center
-        dbc.Col(html.Div([
-                 html.H3("Cells display"),
-                 html.Div(id="cell_display")
-        ]), width=3),
+
         # Features pairplot on the right
-        #dbc.Col(html.Div([
-        #    html.H3("Feat-feat plot"), dcc.Graph(id="")
-        #]), width=5)
+        dbc.Col(html.Div([
+            html.H3("Feat-feat plot"),
+            html.Div(dcc.RadioItems(id='features-option-radio',
+                                            options=[
+                                                {'label': ' Genes vs Genes', 'value': 'genes_genes'},
+                                                {'label': ' Genes vs imaging features', 'value': 'genes_img'},
+                                                {'label': ' Imaging features: classic vs DL', 'value': 'img_img'}
+                                            ],
+                                            value='genes_genes',
+                                            labelStyle={'display': 'inline-block', 'margin-right': '10px'}
+                                        ),
+                                 className='d-flex justify-content-center'
+                         ),
+                          html.Div(
+                              dcc.RadioItems(id='filter-option-radio',
+                                            options=[
+                                                {'label': ' Top N', 'value': 'top_n'},
+                                                {'label': ' Threshold', 'value': 'threshold'}
+                                            ],
+                                            value='top_n',
+                                            labelStyle={'display': 'inline-block', 'margin-right': '10px'}
+                                        ),
+                                  className='d-flex justify-content-center'
+                          ),
+                          html.Div([
+                              html.Div(
+                                  dcc.Input(
+                                      id='top-n-input',
+                                      type='number',
+                                      placeholder='Entrez la valeur de N',
+                                      value=10,
+                                      style={'margin-right': '10px'}
+                                  ),
+                                className='d-flex justify-content-center'
+                              ),
+                              html.Div([
+                                  dcc.Slider(
+                                      id='threshold-input',
+                                      min=0.3,
+                                      max=1,
+                                      step=0.01,
+                                      value=0.8,
+                                      marks={i / 10: f'{i / 10:.1f}' for i in range(0, 11)},
+                                      tooltip={"placement": "bottom", "always_visible": True}
+                                  )
+                              ], id='threshold-input-container', style={'display': 'none'})
+                          ], id='filter-input-container'),
+                         html.Br(),
+        dcc.Dropdown(id='correlation-pairs-dropdown', placeholder="Select one of the most correlated or anti-correlated pair of variables", style={'font-size': '14px', 'width': '90%', 'margin': '0 auto'}),
+        html.Div(dcc.Graph(id='scatter-plot', style={'width': '580px', 'height': '580px'}, clear_on_unhover=True), className='d-flex justify-content-center'),
+        ]), width=6)
     ])
 ])
 
@@ -470,7 +552,6 @@ def cell_crop_on_hover_clustering(selected_sample, hoverData):
     cage_ID = hoverData["points"][0]["customdata"][0]
     df_cells_sc = get_single_cells(chip_ID)
     df_cells_sc.set_index("Cage_ID", inplace=True)
-    print(df_cells_sc)
 
     cell_items = []
     for channel in channel_available:
@@ -514,7 +595,7 @@ def update_scatterplot_UMI_sc(selected_sample):
         fig.add_trace(go.Scatter(x=df.H_UMIs_cage, y=df.M_UMIs_cage, name=f"{spe} cage", mode="markers", marker_opacity=0.55, marker_size=4, marker_color=cell_type_colors[spe], text=df.index, hovertemplate=hovertemplate))
     fig.update_xaxes(range=[-30, maxi + 10], title="Human UMI counts")
     fig.update_yaxes(range=[-30, maxi + 10], title="Murine UMI counts")
-    fig.update_layout(height=600, width=600,
+    fig.update_layout(height=600, width=600, margin=dict(t=10),
                       legend=dict(
                         title="Cell type from imaging",
                         font_size=10,
@@ -581,6 +662,144 @@ def cell_crop_on_hover_scatterUMI(selected_sample, hoverData):
         if not cell_items:
             raise Exception
         return html.Div(cell_items, style={"display": "flex", "justify-content": "center", "align-items": "flex-start"})
+    except Exception as error:
+        print(error)
+        raise PreventUpdate
+
+
+@app.callback(
+    Output('top-n-input', 'style'),
+    Output('threshold-input-container', 'style'),
+    [Input('filter-option-radio', 'value')]
+)
+# Allows to display int input or threshold according to the selected filter option
+def update_filter_input(filter_option):
+    if filter_option == 'top_n':
+        return {'margin-right': '10px'}, {'display': 'none'}
+    elif filter_option == 'threshold':
+        return {'display': 'none'}, {'margin-right': '10px'}
+    return {}, {}
+
+@app.callback(
+    Output('correlation-pairs-dropdown', 'options'),
+    [Input('dropdown', 'value'),
+    Input('features-option-radio', 'value'),
+    Input('filter-option-radio', 'value'),
+    Input('top-n-input', 'value'),
+    Input('threshold-input', 'value')]
+)
+# Get the pair of most correlated variables
+def update_correlation_dropdown(selected_sample, feat_type, filter_option, top_n, threshold):
+    # If any seq is selected, or if cell_type is selected for data type selection but this cell type isn't yet choose, return empty
+    if selected_sample is None:
+        return []
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+
+    corr_matrix = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.correlation_greater_0.3.tsv", index_col=0)
+
+    top_corr_pairs = get_top_correlated_pairs(corr_matrix, filter_option, top_n, threshold, feat_type)
+    top_corr_pairs["Correlation"].astype(float)
+
+    # Add the top correlated pairs into a dropdown list
+    dropdown_options = [
+        {'label': f"{i+1}. {row['Variable1']} ({t1}) " +  " vs " + f"{row['Variable2']} ({t2})" + f" (R: {row['Correlation']:.2f})",
+             'value': f"{row['Variable1']},{row['Variable2']}"}
+            for (i, row), t1, t2 in zip(top_corr_pairs.iterrows(), top_corr_pairs.Variable1_type, top_corr_pairs.Variable2_type)
+        ]
+
+    return dropdown_options
+
+@app.callback(
+    Output('scatter-plot', 'figure'),
+    [Input('correlation-pairs-dropdown', 'value'),
+     Input('dropdown', 'value')]
+)
+# Create the scatter plot of the 2 variables selected from the top correlated pairs
+def update_scatter_plot(correlation_value, selected_sample):
+    # If any seq is selected, or if the top pair isn't yet chosen, return empty
+    if correlation_value is None or selected_sample is None:
+        return {}
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+
+    df_sc = get_single_cells(chip_ID)
+
+    # Get df_count
+    df_count = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.counts.tsv", index_col=0)
+    df_count = df_count.loc[df_count.index != 'Type']
+    print(df_count)
+
+    df_count["Cell_type_img"] = df_sc.set_index("Cage_ID").loc[df_count.index, "Cell_Type"]
+
+    # Get the 2 variables of the selected top correlated pair from the dropdown list
+    var1, var2 = correlation_value.split(',')
+    # Add the coloration of the cages if needed
+    fig = px.scatter(df_count, y=var1, x=var2, opacity=0.5, color="Cell_type_img", color_discrete_map=cell_type_colors, title=f"Correlation scatter plot of {var1} vs {var2}", custom_data=[df_count.index])
+    #fig.update_yaxes(range=[min(df_count[var1].min(), df_count[var2].min()) - 1, max(df_count[var1].max(), df_count[var2].max()) + 1])
+    #fig.update_xaxes(range=[min(df_count[var2].min(), df_count[var1].min()) - 1, max(df_count[var2].max(), df_count[var1].max()) + 1])
+    fig.update_traces(
+        hovertemplate="<b>Cage_ID: %{customdata[0]}</b><br>" +
+                      "%{yaxis.title.text}: %{y}<br>" +
+                      "%{xaxis.title.text}: %{x}<extra></extra>")
+    fig.update_layout(legend=dict(
+        title="Cell type from imaging",
+        font_size=8,
+        yanchor="top",
+        y=0.99,
+        xanchor="left",
+        x=0.01,
+        bgcolor='rgba(0,0,0,0)',
+    ))
+
+    return fig
+
+
+@app.callback(
+    Output("cell_display", "children", allow_duplicate=True),
+    [Input('dropdown', 'value'),
+     Input('correlation-pairs-dropdown', 'value'),
+     Input("scatter-plot", "hoverData")],
+    prevent_initial_call=True
+)
+def cell_crop_on_hover_scatter_plot(selected_sample, correlation_dropdown, hoverData):
+    """
+    Display cell crop of sc cages.
+    """
+    if correlation_dropdown is None or hoverData is None or selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+    mag="20X"
+
+    channel_available = np.unique([c.split("-T")[0] for c in sorted(os.listdir(f"{bigbi_path}/Chips/Chip{chip_ID}/{chip_ID}_images/{mag.lower()}/Cells/Crops/"))])
+    # Fix RGB image in first
+    if "RGB" in channel_available:
+        channel_available = np.delete(channel_available, np.where(channel_available == "RGB")[0])
+        channel_available = np.insert(channel_available, 0, "RGB")
+
+    cage_ID = hoverData["points"][0]["customdata"][0]
+    df_cells_sc = get_single_cells(chip_ID)
+    df_cells_sc.set_index("Cage_ID", inplace=True)
+
+    cell_crops_section = [html.Div("Cell crops:", style={"text-align": "center", "font-size": "12px", "color": "#555"})]
+    for channel in channel_available:
+        cell_path = get_cell_crop_path(chip_ID, cage_ID, mag, df_cells_sc, channel)
+        if os.path.exists(cell_path.replace("Minos_space/", bigbi_path)):
+            cell_crops_section.append(html.Div([
+                html.Div(channel, style={"text-align": "center", "font-size": "12px", "color": "#555"}),
+                html.Img(
+                    src=dash.get_asset_url(cell_path),
+                    alt=f"Image not available (chip {chip_ID}, {seq_ID})",
+                    style={"width": "80px", "margin-bottom": "5px"}
+                )
+            ], style={"margin-right": "10px", "margin-top": "0px", "display": "inline-block", "text-align": "center"}))
+
+    try:
+        if not cell_crops_section:
+            raise Exception
+        return html.Div(cell_crops_section, style={"display": "flex", "flex-wrap": "wrap", "justify-content": "center"})
     except Exception as error:
         print(error)
         raise PreventUpdate
