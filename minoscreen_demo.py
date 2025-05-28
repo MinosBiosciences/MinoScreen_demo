@@ -55,6 +55,22 @@ def get_single_cells(chip_ID: str):
         return {}
     return df_cells_filtered
 
+def get_cell_crop_path(chip_ID, cage_ID, mag, cells, channel):
+    try:
+        print(chip_ID)
+        cells_info = cells.loc[cage_ID]
+        tile_ID = cells_info.loc['Tile_ID']
+        if chip_ID == "159":
+            cell_folder = f"Cell_crops2/{channel}"
+        else:
+            cell_folder = f"Cells/Crops/{channel}-T0"
+            tile_ID = str(tile_ID).zfill(4)
+        cell_path = f"Minos_space/Chips/Chip{chip_ID}/{chip_ID}_images/{mag.lower()}/{cell_folder}/chip{chip_ID}_tile{tile_ID}_cell{cells_info.loc['Cell_Index_Global']}_local{cells_info.loc['Cell_Index_Local']}.png"
+        print(cell_path)
+    except:
+        cell_path = ""
+    return cell_path
+
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 server = app.server
@@ -107,6 +123,31 @@ app.layout = html.Div([
         dbc.Col(html.Div([
             html.H3("Fluo intensity pairplot (log values)"), dcc.Graph(id="cell_fluo_intensity_pairplot")
         ]), width=9),
+    ]),
+
+    # Third row
+    dbc.Row([
+        # Omics, bimodal and imaging clustering
+        dbc.Col(html.Div([
+            html.H3("Clustering"), dcc.Graph(id="clustering_sc", clear_on_unhover=True)
+        ]))
+    ]),
+
+    # Fourth row
+    dbc.Row([
+        # Scatter plot UMI on the left
+        dbc.Col(html.Div([
+            html.H3("Cells omics vs imaging"), dcc.Graph(id="scatterplot_UMI_sc", clear_on_unhover=True)
+        ]), width=5),
+        # Image display on the center
+        dbc.Col(html.Div([
+                 html.H3("Cells display"),
+                 html.Div(id="cell_display")
+        ]), width=3),
+        # Features pairplot on the right
+        #dbc.Col(html.Div([
+        #    html.H3("Feat-feat plot"), dcc.Graph(id="")
+        #]), width=5)
     ])
 ])
 
@@ -197,7 +238,7 @@ def update_cell_pie_chart(selected_sample):
     # Extract chip_ID and seqID from the format "Chip204_M049-PoC79"
     parts = selected_sample.replace("Chip", "").split("_")
     chip_ID = parts[0]
-    seqID = parts[1].split("-")[0]  # Extract M049 from M049-PoC79
+    seq_ID = parts[1].split("-")[0]  # Extract M049 from M049-PoC79
 
     # Keep onyl single cells in cages
     df_sc = get_single_cells(chip_ID)
@@ -282,6 +323,257 @@ def update_cell_fluo_pairplot(selected_sample):
             size=15)
     )
     return fig
+
+# Omics, bimodal and imaging clustering callback
+@app.callback(
+    Output("clustering_sc", "figure"),
+    Input("dropdown", "value")
+)
+def update_clustering(selected_sample):
+    if selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+
+    df_clustering = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.clustering.tsv", index_col=0)
+    df_clustering.loc[df_clustering.Cell_type_img == "Undetermined_cells", "Cell_type_img"] = "Undetermined"
+    df_clustering["ID"] = df_clustering.index
+
+    fig_omics = px.scatter(df_clustering, x="UMAP1_sc", y="UMAP2_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
+                      color_discrete_map=cell_type_colors, category_orders={"Cell_type_img": ["Undetermined", "Mouse", "Human"]})
+    fig_omics.update_traces(hovertemplate="UMAP1: %{x}<br>UMAP2: %{y}<br>Cage_ID: %{customdata[0]}<extra></extra>")
+
+    fig_bimodal = px.scatter(df_clustering, x="UMAP1_bimodal_sc", y="UMAP2_bimodal_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
+                      color_discrete_map=cell_type_colors, category_orders={"Cell_type_img": ["Undetermined", "Mouse", "Human"]})
+    fig_bimodal.update_traces(hovertemplate="UMAP1: %{x}<br>UMAP2: %{y}<br>Cage_ID: %{customdata[0]}<extra></extra>")
+
+    fig_img = px.scatter(df_clustering, x="UMAP1_CP_sc", y="UMAP2_CP_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
+                      color_discrete_map=cell_type_colors, category_orders={"Cell_type_img": ["Undetermined", "Mouse", "Human"]})
+    fig_img.update_traces(hovertemplate="UMAP1: %{x}<br>UMAP2: %{y}<br>Cage_ID: %{customdata[0]}<extra></extra>")
+
+    subplots_fig = make_subplots(rows=1, cols=3, subplot_titles=("Omics-based clustering", "Bimodal clustering", "Imaging-based clustering"),
+                                 horizontal_spacing=0.08)
+
+    for i in range(len(fig_omics["data"])):
+        if i == 0:
+            fig_omics['data'][i]["legendgrouptitle_text"] = "Cell type from imaging"
+        subplots_fig.add_trace(fig_omics["data"][i], col=1, row=1)
+    for i in range(len(fig_bimodal["data"])):
+        if i == 0:
+            fig_bimodal['data'][i]["legendgrouptitle_text"] = "Cell type from imaging"
+        subplots_fig.add_trace(fig_bimodal["data"][i], col=2, row=1)
+    for i in range(len(fig_img["data"])):
+        if i == 0:
+            fig_img['data'][i]["legendgrouptitle_text"] = "Cell type from imaging"
+        subplots_fig.add_trace(fig_img["data"][i], col=3, row=1)
+
+    for trace in subplots_fig.data:
+        trace.update(marker_size=6, marker_line_color="white")
+
+    subplots_fig.update_layout(#plot_bgcolor="white",
+                               xaxis1_range=[df_clustering.UMAP1_sc.min() - 1, df_clustering.UMAP1_sc.max() + 1],
+                               xaxis2_range=[df_clustering.UMAP1_bimodal_sc.min() - 1, df_clustering.UMAP1_bimodal_sc.max() + 1],
+                               xaxis3_range=[df_clustering.UMAP1_CP_sc.min() - 1, df_clustering.UMAP1_CP_sc.max() + 1],
+                               yaxis1_range=[df_clustering.UMAP2_sc.min() - 1, df_clustering.UMAP2_sc.max() + 1],
+                               yaxis2_range=[df_clustering.UMAP2_bimodal_sc.min() - 1, df_clustering.UMAP2_bimodal_sc.max() + 1],
+                               yaxis3_range=[df_clustering.UMAP2_CP_sc.min() - 1, df_clustering.UMAP2_CP_sc.max() + 1],
+                               font_size=15,
+                               margin=dict(
+                                   b=30
+                               ))
+
+    subplots_fig.update_xaxes(showgrid=True, showticklabels=False)
+    subplots_fig.update_yaxes(showgrid=True, showticklabels=False)
+
+    names = set()
+    subplots_fig.for_each_trace(
+        lambda trace:
+        trace.update(showlegend=False)
+        if (trace.name in names) else names.add(trace.name))
+
+    return subplots_fig
+
+# Hover data highlight in the 3 clustering callback
+@app.callback(
+    Output("clustering_sc", "figure", allow_duplicate=True),
+    Input("clustering_sc", "figure"),
+    Input("clustering_sc", "hoverData"),
+    prevent_initial_call=True
+)
+def update_hover_point_pca_clustering(fig, hoverData):
+    if not fig or "data" not in fig:
+        return fig
+
+    hovered_id = None
+    if hoverData and "points" in hoverData and hoverData["points"]:
+        try:
+            hovered_id = hoverData['points'][0]['customdata'][0]
+        except (KeyError, IndexError, TypeError):
+            hovered_id = None
+
+    for scat in fig["data"]:
+        if "customdata" in scat and scat["customdata"]:
+            ids = [x[0] for x in scat["customdata"]]
+
+            # Index du point survolé (si hover actif)
+            idx = -1
+            if hovered_id in ids:
+                idx = ids.index(hovered_id)
+
+            # Réinitialiser tous les points
+            size_array = [12 if j == idx else 6 for j in range(len(scat["x"]))]
+            line_color_array = ['black' if j == idx else 'white' for j in range(len(scat["x"]))]
+
+            # Mise à jour des propriétés
+            scat.setdefault("marker", {})
+            scat["marker"]["size"] = size_array
+            scat["marker"].setdefault("line", {})
+            scat["marker"]["line"]["color"] = line_color_array
+
+    return fig
+
+# Cell crop display on hover clustering callback
+@app.callback(
+    Output("cell_display", "children", allow_duplicate=True),
+    [Input('dropdown', 'value'),
+     Input("clustering_sc", "hoverData")],
+    prevent_initial_call=True
+)
+def cell_crop_on_hover_clustering(selected_sample, hoverData):
+    """
+    Display cell crop of sc cages.
+    """
+    if hoverData is None or selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+    mag="20X"
+
+    channel_available = np.unique([c.split("-T")[0] for c in sorted(os.listdir(f"{bigbi_path}/Chips/Chip{chip_ID}/{chip_ID}_images/{mag.lower()}/Cells/Crops/"))])
+    # Fix RGB image in first
+    if "RGB" in channel_available:
+        channel_available = np.delete(channel_available, np.where(channel_available == "RGB")[0])
+        channel_available = np.insert(channel_available, 0, "RGB")
+
+    cage_ID = hoverData["points"][0]["customdata"][0]
+    df_cells_sc = get_single_cells(chip_ID)
+    df_cells_sc.set_index("Cage_ID", inplace=True)
+    print(df_cells_sc)
+
+    cell_items = []
+    for channel in channel_available:
+        cell_path = get_cell_crop_path(chip_ID, cage_ID, mag, df_cells_sc, channel)
+        print(cell_path)
+        if os.path.exists(cell_path.replace("Minos_space/", bigbi_path)):
+            cell_items.append(html.Div([
+                html.Div(channel, style={"text-align": "center", "font-size": "12px", "color": "#555"}),
+                html.Img(
+                    src=dash.get_asset_url(cell_path),
+                    alt=f"Image not available (chip {chip_ID}, {seq_ID})",
+                    style={"width": "80px", "margin-bottom": "5px"}
+                )
+            ], style={"margin-right": "10px", "margin-top": "0px", "display": "inline-block", "text-align": "center"}))
+
+    try:
+        if not cell_items:
+            raise Exception
+        return html.Div(cell_items, style={"display": "flex", "justify-content": "center", "align-items": "flex-start"})
+    except Exception as error:
+        print(error)
+        raise PreventUpdate
+
+# UMI scatterplot callback
+@app.callback(Output("scatterplot_UMI_sc", "figure"),
+              [Input("dropdown", "value")])
+def update_scatterplot_UMI_sc(selected_sample):
+    if selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+
+    df_scatter = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.scatter_UMI.tsv", index_col=0)
+    maxi = max(max(df_scatter.H_UMIs_cage), max(df_scatter.M_UMIs_cage))
+
+    fig = go.Figure()
+    hovertemplate = "<b>CageID</b>: %{text}<br /><i>Human UMI count</i>: %{x}<br /><i>Murine UMI count: %{y}"
+    for spe in df_scatter.Cell_type_img.unique():
+        df = df_scatter.query("Cell_type_img==@spe")
+        fig.add_trace(go.Scatter(x=df.H_UMIs_cage, y=df.M_UMIs_cage, name=f"{spe} cage", mode="markers", marker_opacity=0.55, marker_size=4, marker_color=cell_type_colors[spe], text=df.index, hovertemplate=hovertemplate))
+    fig.update_xaxes(range=[-30, maxi + 10], title="Human UMI counts")
+    fig.update_yaxes(range=[-30, maxi + 10], title="Murine UMI counts")
+    fig.update_layout(height=600, width=600,
+                      legend=dict(
+                        title="Cell type from imaging",
+                        font_size=10,
+                        yanchor="top",
+                        y=0.99,
+                        xanchor="right",
+                        x=0.99,
+                        bgcolor='rgba(0,0,0,0)',
+                     ), xaxis=dict(
+                            tick0=0,
+                            dtick=200,
+                        ),
+                        yaxis=dict(
+                            tick0=0,
+                            dtick=200,
+                        )
+                     )
+    return fig
+
+# Cell crop display on hover scatterplot UMI callback
+@app.callback(
+    Output("cell_display", "children", allow_duplicate=True),
+    [Input('dropdown', 'value'),
+     Input("scatterplot_UMI_sc", "hoverData")],
+    prevent_initial_call=True
+)
+def cell_crop_on_hover_scatterUMI(selected_sample, hoverData):
+    """
+    Display cell crop of sc cages.
+    """
+    if hoverData is None or selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+    mag="20X"
+
+    channel_available = np.unique([c.split("-T")[0] for c in sorted(os.listdir(f"{bigbi_path}/Chips/Chip{chip_ID}/{chip_ID}_images/{mag.lower()}/Cells/Crops/"))])
+    # Fix RGB image in first
+    if "RGB" in channel_available:
+        channel_available = np.delete(channel_available, np.where(channel_available == "RGB")[0])
+        channel_available = np.insert(channel_available, 0, "RGB")
+
+    cage_ID = hoverData["points"][0]["text"]
+    df_cells_sc = get_single_cells(chip_ID)
+    df_cells_sc.set_index("Cage_ID", inplace=True)
+    print(df_cells_sc)
+
+    cell_items = []
+    for channel in channel_available:
+        cell_path = get_cell_crop_path(chip_ID, cage_ID, mag, df_cells_sc, channel)
+        print(cell_path)
+        if os.path.exists(cell_path.replace("Minos_space/", bigbi_path)):
+            cell_items.append(html.Div([
+                html.Div(channel, style={"text-align": "center", "font-size": "12px", "color": "#555"}),
+                html.Img(
+                    src=dash.get_asset_url(cell_path),
+                    alt=f"Image not available (chip {chip_ID}, {seq_ID})",
+                    style={"width": "80px", "margin-bottom": "5px"}
+                )
+            ], style={"margin-right": "10px", "margin-top": "0px", "display": "inline-block", "text-align": "center"}))
+
+    try:
+        if not cell_items:
+            raise Exception
+        return html.Div(cell_items, style={"display": "flex", "justify-content": "center", "align-items": "flex-start"})
+    except Exception as error:
+        print(error)
+        raise PreventUpdate
 
 
 if __name__ == '__main__':
