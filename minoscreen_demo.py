@@ -395,6 +395,7 @@ def update_clustering(selected_sample):
     return subplots_fig
 
 # Hover data highlight in the 3 clustering callback
+"""
 @app.callback(
     Output("clustering_sc", "figure", allow_duplicate=True),
     Input("clustering_sc", "figure"),
@@ -432,7 +433,7 @@ def update_hover_point_pca_clustering(fig, hoverData):
             scat["marker"]["line"]["color"] = line_color_array
 
     return fig
-
+"""
 # Cell crop display on hover clustering callback
 @app.callback(
     Output("cell_display", "children", allow_duplicate=True),
