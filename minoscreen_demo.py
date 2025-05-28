@@ -96,7 +96,10 @@ app.layout = html.Div([
     dbc.Row(dbc.Col(html.H1(id="H1", children=f"MinoScreen: Minos coupled datasets explorer", className="app-header--title"))),
 
     # Sample selector (dropdown)
-    dbc.Row(dbc.Col(dcc.Dropdown(id="dropdown", style={"width": "330px"}, options=samples_dropdown, value=selected_sample), width=4), justify="center", className="mb-4"),
+    dbc.Row([
+        dbc.Col(html.Label("Sample to analyse:", style={"margin-right": "10px", "display": "inline-block", "vertical-align": "middle", "fontWeight": "bold"}), width="auto"),
+        dbc.Col(dcc.Dropdown(id="dropdown", style={"width": "330px", "vertical-align": "middle"}, options=samples_dropdown, value=selected_sample), width="auto")
+    ], justify="center", className="mb-4", align="center"),
 
     # First row with table, pie chart, and images
     dbc.Row([
@@ -170,7 +173,7 @@ def update_sample_table(selected_sample):
     chip_ID = parts[0]
     seq_ID = parts[1]
     # Read the TSV file
-    df = pd.read_csv(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.MinoScreen_info.tsv", sep='\t')
+    df = pd.read_csv(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.MinoScreen_info.tsv", sep='\t', skipfooter=1)  # For now we don't show the UGC (last line of the table)
     # Rename the first column (which has an empty or 'Unnamed: 0' header) to selected sample
     first_col_name = df.columns[0]  # Get the name of the first column
     df = df.rename(columns={first_col_name: selected_sample})
@@ -221,9 +224,7 @@ def update_sample_table(selected_sample):
 def update_cells_per_cage(selected_sample):
     parts = selected_sample.replace("Chip", "").split("_")
     chip_ID = parts[0]
-    # grid_path_Cy5 = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC-_Cy5+.RGB.best.tif")[0]
     grid_path_Cy5 = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC-_Cy5+.RGB.best.png")[0]
-    # grid_path_FITC = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC+_Cy5-.RGB.best.tif")[0]
     grid_path_FITC = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC+_Cy5-.RGB.best.png")[0]
     return [html.Div([html.Img(id="image1", src=app.get_asset_url(grid_path_Cy5.lstrip("assets/")), alt="mesc", style={"width": "100%", "height": "auto", "border": "1px solid #ddd"}),
                       html.P("Human cells (Cy5 marker)")], style={"width": "48%", "display": "inline-block", "marginRight": "4%"}),
@@ -235,10 +236,9 @@ def update_cells_per_cage(selected_sample):
 @app.callback(Output("cell_types_piechart", "figure"),
               [Input("dropdown", "value")])
 def update_cell_pie_chart(selected_sample):
-    # Extract chip_ID and seqID from the format "Chip204_M049-PoC79"
+    # Extract chip_ID from the selected sample value
     parts = selected_sample.replace("Chip", "").split("_")
     chip_ID = parts[0]
-    seq_ID = parts[1].split("-")[0]  # Extract M049 from M049-PoC79
 
     # Keep onyl single cells in cages
     df_sc = get_single_cells(chip_ID)
@@ -583,6 +583,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", dest="port", type=int, default=8050, help="Port number to display on.")
     args = parser.parse_args()
-    # args, unknown = parser.parse_known_args()  # Fixed a bug with gunicorn
 
     app.run(debug=True, port=args.port)
