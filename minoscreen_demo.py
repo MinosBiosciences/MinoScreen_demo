@@ -164,26 +164,17 @@ app.layout = html.Div([
     ]),
 
     # Fourth row
-    # Image display on the center
-    dbc.Row(
-        dbc.Col(
-            html.Div([
-                html.H3("Cells display", className="text-center"),
-                html.Div(id="cell_display")
-            ]),
-            width=3
-        ),
-        justify="center",
-        style={"height": "120px"}
-    ),
-
-
-    # Fifth row
     dbc.Row([
         # Scatter plot UMI on the left
         dbc.Col(html.Div([
             html.H3("Cells omics vs imaging"), dcc.Graph(id="scatterplot_UMI_sc", clear_on_unhover=True),
-        ]), width=5),
+        ]), width=3),
+
+        # Image display on the center
+        dbc.Col(html.Div([
+            html.H3("Cells display", className="text-center"),
+            html.Div(id="cell_display")
+        ]), width=5),# justify="center", style={"height": "120px"},
 
         # Features pairplot on the right
         dbc.Col(html.Div([
@@ -236,7 +227,7 @@ app.layout = html.Div([
                          html.Br(),
         dcc.Dropdown(id='correlation-pairs-dropdown', placeholder="Select one of the most correlated or anti-correlated pair of variables", style={'font-size': '14px', 'width': '90%', 'margin': '0 auto'}),
         html.Div(dcc.Graph(id='scatter-plot', style={'width': '580px', 'height': '580px'}, clear_on_unhover=True), className='d-flex justify-content-center'),
-        ]), width=6)
+        ]), width=4),
     ])
 ])
 
@@ -431,6 +422,9 @@ def update_clustering(selected_sample):
     chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
 
     df_clustering = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.clustering.tsv", index_col=0)
+    df_clustering.loc[df_clustering.Cell_type_img == "Human", "Cell_type_img"] = "Ramos_Human"  # Temp modif
+    df_clustering.loc[df_clustering.Cell_type_img == "Mouse", "Cell_type_img"] = "B3Z_murine"  # Temp modif
+    df_clustering.loc[df_clustering.Cell_type_img == "Undetermined_cells", "Cell_type_img"] = "Undetermined"  # Temp modif
     df_clustering.loc[df_clustering.Cell_type_img == "Undetermined_cells", "Cell_type_img"] = "Undetermined"
     df_clustering["ID"] = df_clustering.index
 
@@ -566,7 +560,7 @@ def cell_crop_on_hover_clustering(selected_sample, hoverData):
                 html.Img(
                     src=dash.get_asset_url(cell_path),
                     alt=f"Image not available (chip {chip_ID}, {seq_ID})",
-                    style={"width": "80px", "margin-bottom": "5px"}
+                    style={"width": "70px", "margin-bottom": "5px"}
                 )
             ], style={"margin-right": "10px", "margin-top": "0px", "display": "inline-block", "text-align": "center"}))
 
@@ -590,15 +584,18 @@ def update_scatterplot_UMI_sc(selected_sample):
 
     df_scatter = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.scatter_UMI.tsv", index_col=0)
     maxi = max(max(df_scatter.H_UMIs_cage), max(df_scatter.M_UMIs_cage))
+    df_scatter.loc[df_scatter.Cell_type_img == "Human", "Cell_type_img"] = "Ramos_Human"  # Temp modif
+    df_scatter.loc[df_scatter.Cell_type_img == "Mouse", "Cell_type_img"] = "B3Z_murine"  # Temp modif
+    df_scatter.loc[df_scatter.Cell_type_img == "Undetermined_cells", "Cell_type_img"] = "Undetermined"  # Temp modif
 
     fig = go.Figure()
-    hovertemplate = "<b>CageID</b>: %{text}<br /><i>Human UMI count</i>: %{x}<br /><i>Murine UMI count: %{y}"
+    hovertemplate = "<b>CageID</b>: %{text}<br /><i>Ramos (Human) UMI count</i>: %{x}<br /><i>B3Z (murine) UMI count: %{y}"
     for spe in df_scatter.Cell_type_img.unique():
         df = df_scatter.query("Cell_type_img==@spe")
-        fig.add_trace(go.Scatter(x=df.H_UMIs_cage, y=df.M_UMIs_cage, name=f"{spe} cage", mode="markers", marker_opacity=0.55, marker_size=4, marker_color=cell_type_colors[spe], text=df.index, hovertemplate=hovertemplate))
-    fig.update_xaxes(range=[-30, maxi + 10], title="Human UMI counts")
-    fig.update_yaxes(range=[-30, maxi + 10], title="Murine UMI counts")
-    fig.update_layout(height=600, width=600, margin=dict(t=10),
+        fig.add_trace(go.Scatter(x=df.H_UMIs_cage, y=df.M_UMIs_cage, name=f"{spe} cell", mode="markers", marker_opacity=0.55, marker_size=4, marker_color=cell_type_colors[spe], text=df.index, hovertemplate=hovertemplate))
+    fig.update_xaxes(range=[-30, maxi + 10], title="Ramos (Human) UMI counts")
+    fig.update_yaxes(range=[-30, maxi + 10], title="B3Z (murine) UMI counts")
+    fig.update_layout(height=400, width=500, margin=dict(t=10),
                       legend=dict(
                         title="Cell type from imaging",
                         font_size=10,
@@ -727,6 +724,8 @@ def update_scatter_plot(correlation_value, selected_sample):
     chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
 
     df_sc = get_single_cells(chip_ID)
+    df_sc.loc[df_sc.Cell_Type == "H_Ramos", "Cell_Type"] = "Ramos_Human"  # Temp modif
+    df_sc.loc[df_sc.Cell_Type == "M_B3Z", "Cell_Type"] = "B3Z_murine"  # Temp modif
 
     # Get df_count
     df_count = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.counts.tsv", index_col=0)
