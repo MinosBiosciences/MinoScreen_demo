@@ -61,7 +61,7 @@ def get_single_cells(chip_ID: str):
 
 def get_cell_crop_path(chip_ID, cage_ID, mag, cells, channel):
     try:
-        print(chip_ID)
+        # print(chip_ID)
         cells_info = cells.loc[cage_ID]
         tile_ID = cells_info.loc['Tile_ID']
         if chip_ID == "159":
@@ -70,7 +70,7 @@ def get_cell_crop_path(chip_ID, cage_ID, mag, cells, channel):
             cell_folder = f"Cells/Crops/{channel}-T0"
             tile_ID = str(tile_ID).zfill(4)
         cell_path = f"Minos_space/Chips/Chip{chip_ID}/{chip_ID}_images/{mag.lower()}/{cell_folder}/chip{chip_ID}_tile{tile_ID}_cell{cells_info.loc['Cell_Index_Global']}_local{cells_info.loc['Cell_Index_Local']}.png"
-        print(cell_path)
+        # print(cell_path)
     except:
         cell_path = ""
     return cell_path
@@ -178,7 +178,7 @@ app.layout = html.Div([
     ),
 
 
-    # Fourth row
+    # Fifth row
     dbc.Row([
         # Scatter plot UMI on the left
         dbc.Col(html.Div([
@@ -391,7 +391,10 @@ def update_cell_fluo_pairplot(selected_sample):
     df_sc.loc[:, intensity_cols] = np.log10(df_sc.loc[:, intensity_cols])
     # Get all cols
     all_cols = intensity_cols + ["Cage_ID", "Cell_Type"]
-    fig = px.scatter_matrix(df_sc[all_cols], opacity=0.45, dimensions=intensity_cols, color="Cell_Type", color_discrete_map=cell_type_colors)
+    try:
+        fig = px.scatter_matrix(df_sc[all_cols], opacity=0.45, dimensions=intensity_cols, color="Cell_Type", color_discrete_map=cell_type_colors)
+    except ValueError:  # Hack to avoid a bug (https://community.plotly.com/t/valueerror-invalid-value-in-basedatatypes-py/55993/6)
+        fig = px.scatter_matrix(df_sc[all_cols], opacity=0.45, dimensions=intensity_cols, color="Cell_Type", color_discrete_map=cell_type_colors)
 
     fig.update_traces(showupperhalf=False)
     fig.update_traces(selector=dict(mode='markers', marker=dict(line=dict(color="black", width=2))))
@@ -556,7 +559,7 @@ def cell_crop_on_hover_clustering(selected_sample, hoverData):
     cell_items = []
     for channel in channel_available:
         cell_path = get_cell_crop_path(chip_ID, cage_ID, mag, df_cells_sc, channel)
-        print(cell_path)
+        # print(cell_path)
         if os.path.exists(cell_path.replace("Minos_space/", bigbi_path)):
             cell_items.append(html.Div([
                 html.Div(channel, style={"text-align": "center", "font-size": "12px", "color": "#555"}),
