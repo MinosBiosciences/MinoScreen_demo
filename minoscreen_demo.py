@@ -59,12 +59,51 @@ def get_single_cells(chip_ID: str):
         return {}
     return df_cells_filtered
 
+def get_cell_crop_path(chip_ID, cage_ID, mag, cells, channel):
+    try:
+        print(chip_ID)
+        cells_info = cells.loc[cage_ID]
+        tile_ID = cells_info.loc['Tile_ID']
+        if chip_ID == "159":
+            cell_folder = f"Cell_crops2/{channel}"
+        else:
+            cell_folder = f"Cells/Crops/{channel}-T0"
+            tile_ID = str(tile_ID).zfill(4)
+        cell_path = f"Minos_space/Chips/Chip{chip_ID}/{chip_ID}_images/{mag.lower()}/{cell_folder}/chip{chip_ID}_tile{tile_ID}_cell{cells_info.loc['Cell_Index_Global']}_local{cells_info.loc['Cell_Index_Local']}.png"
+        print(cell_path)
+    except:
+        cell_path = ""
+    return cell_path
+
+def get_top_correlated_pairs(corr_matrix, mode, n, thresh, feat_type):
+    # Get only selected feature type
+    if feat_type == "genes_genes":
+        corr_matrix = corr_matrix[(corr_matrix.Variable1_type == "Genes") & (corr_matrix.Variable2_type == "Genes")]
+    elif feat_type == "img_img":
+        corr_matrix = corr_matrix[(corr_matrix.Variable1_type.isin(["CP features"]) & corr_matrix.Variable2_type.isin(["DL features"])) | (corr_matrix.Variable1_type.isin(["DL features"]) & corr_matrix.Variable2_type.isin(["CP features"]))]
+    elif feat_type == "genes_img":
+        corr_matrix = corr_matrix[(corr_matrix.Variable1_type.isin(["CP features", "DL features"]) & corr_matrix.Variable2_type.isin(["Genes"])) | (corr_matrix.Variable1_type.isin(["Genes"]) & corr_matrix.Variable2_type.isin(["CP features", "DL features"]))]
+    # Get the top correlated pairs
+    if mode == "top_n":
+        positive_pairs = corr_matrix[corr_matrix['Correlation'] > 0].nlargest(n, 'Correlation')
+        negative_pairs = corr_matrix[corr_matrix['Correlation'] < 0].nsmallest(n, 'Correlation')
+    elif mode == "threshold":
+        positive_pairs = corr_matrix[(corr_matrix['Correlation'] > thresh)]
+        negative_pairs = corr_matrix[(corr_matrix['Correlation'] < -thresh)]
+    positive_pairs["CorrelationType"] = "Positive"
+    negative_pairs["CorrelationType"] = "Negative"
+    top_corr_pairs = pd.concat([positive_pairs, negative_pairs])
+    top_corr_pairs = top_corr_pairs.reset_index()
+
+    return top_corr_pairs.sort_values(by='Correlation', ascending=False)
+
+
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 server = app.server
 
 # Hardcoded samples
-samples_list = ["Chip204_M049-PoC79", "Chip206_M051-PoC80"]
+samples_list = ["Chip204_M049-PoC78", "Chip206_M051-PoC80"]
 selected_sample = samples_list[1]  # Default to first sample
 
 # Creating dropdown options
@@ -114,6 +153,90 @@ app.layout = html.Div([
         dbc.Col(html.Div([
             html.H3("Fluo intensity pairplot (log values)"), dcc.Graph(id="cell_fluo_intensity_pairplot")
         ]), width=9),
+    ]),
+
+    # Third row
+    dbc.Row([
+        # Omics, bimodal and imaging clustering
+        dbc.Col(html.Div([
+            html.H3("Clustering"), dcc.Graph(id="clustering_sc", clear_on_unhover=True)
+        ]))
+    ]),
+
+    # Fourth row
+    # Image display on the center
+    dbc.Row(
+        dbc.Col(
+            html.Div([
+                html.H3("Cells display", className="text-center"),
+                html.Div(id="cell_display")
+            ]),
+            width=3
+        ),
+        justify="center",
+        style={"height": "120px"}
+    ),
+
+
+    # Fourth row
+    dbc.Row([
+        # Scatter plot UMI on the left
+        dbc.Col(html.Div([
+            html.H3("Cells omics vs imaging"), dcc.Graph(id="scatterplot_UMI_sc", clear_on_unhover=True),
+        ]), width=5),
+
+        # Features pairplot on the right
+        dbc.Col(html.Div([
+            html.H3("Feat-feat plot"),
+            html.Div(dcc.RadioItems(id='features-option-radio',
+                                            options=[
+                                                {'label': ' Genes vs Genes', 'value': 'genes_genes'},
+                                                {'label': ' Genes vs imaging features', 'value': 'genes_img'},
+                                                {'label': ' Imaging features: classic vs DL', 'value': 'img_img'}
+                                            ],
+                                            value='genes_genes',
+                                            labelStyle={'display': 'inline-block', 'margin-right': '10px'}
+                                        ),
+                                 className='d-flex justify-content-center'
+                         ),
+                          html.Div(
+                              dcc.RadioItems(id='filter-option-radio',
+                                            options=[
+                                                {'label': ' Top N', 'value': 'top_n'},
+                                                {'label': ' Threshold', 'value': 'threshold'}
+                                            ],
+                                            value='top_n',
+                                            labelStyle={'display': 'inline-block', 'margin-right': '10px'}
+                                        ),
+                                  className='d-flex justify-content-center'
+                          ),
+                          html.Div([
+                              html.Div(
+                                  dcc.Input(
+                                      id='top-n-input',
+                                      type='number',
+                                      placeholder='Entrez la valeur de N',
+                                      value=10,
+                                      style={'margin-right': '10px'}
+                                  ),
+                                className='d-flex justify-content-center'
+                              ),
+                              html.Div([
+                                  dcc.Slider(
+                                      id='threshold-input',
+                                      min=0.3,
+                                      max=1,
+                                      step=0.01,
+                                      value=0.8,
+                                      marks={i / 10: f'{i / 10:.1f}' for i in range(0, 11)},
+                                      tooltip={"placement": "bottom", "always_visible": True}
+                                  )
+                              ], id='threshold-input-container', style={'display': 'none'})
+                          ], id='filter-input-container'),
+                         html.Br(),
+        dcc.Dropdown(id='correlation-pairs-dropdown', placeholder="Select one of the most correlated or anti-correlated pair of variables", style={'font-size': '14px', 'width': '90%', 'margin': '0 auto'}),
+        html.Div(dcc.Graph(id='scatter-plot', style={'width': '580px', 'height': '580px'}, clear_on_unhover=True), className='d-flex justify-content-center'),
+        ]), width=6)
     ])
 ])
 
@@ -291,6 +414,395 @@ def update_cell_fluo_pairplot(selected_sample):
             size=15)
     )
     return fig
+
+# Omics, bimodal and imaging clustering callback
+@app.callback(
+    Output("clustering_sc", "figure"),
+    Input("dropdown", "value")
+)
+def update_clustering(selected_sample):
+    if selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+
+    df_clustering = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.clustering.tsv", index_col=0)
+    df_clustering.loc[df_clustering.Cell_type_img == "Undetermined_cells", "Cell_type_img"] = "Undetermined"
+    df_clustering["ID"] = df_clustering.index
+
+    fig_omics = px.scatter(df_clustering, x="UMAP1_sc", y="UMAP2_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
+                      color_discrete_map=cell_type_colors, category_orders={"Cell_type_img": ["Undetermined", "Mouse", "Human"]})
+    fig_omics.update_traces(hovertemplate="UMAP1: %{x}<br>UMAP2: %{y}<br>Cage_ID: %{customdata[0]}<extra></extra>")
+
+    fig_bimodal = px.scatter(df_clustering, x="UMAP1_bimodal_sc", y="UMAP2_bimodal_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
+                      color_discrete_map=cell_type_colors, category_orders={"Cell_type_img": ["Undetermined", "Mouse", "Human"]})
+    fig_bimodal.update_traces(hovertemplate="UMAP1: %{x}<br>UMAP2: %{y}<br>Cage_ID: %{customdata[0]}<extra></extra>")
+
+    fig_img = px.scatter(df_clustering, x="UMAP1_CP_sc", y="UMAP2_CP_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
+                      color_discrete_map=cell_type_colors, category_orders={"Cell_type_img": ["Undetermined", "Mouse", "Human"]})
+    fig_img.update_traces(hovertemplate="UMAP1: %{x}<br>UMAP2: %{y}<br>Cage_ID: %{customdata[0]}<extra></extra>")
+
+    subplots_fig = make_subplots(rows=1, cols=3, subplot_titles=("Omics-based clustering", "Bimodal clustering", "Imaging-based clustering"),
+                                 horizontal_spacing=0.08)
+
+    for i in range(len(fig_omics["data"])):
+        if i == 0:
+            fig_omics['data'][i]["legendgrouptitle_text"] = "Cell type from imaging"
+        subplots_fig.add_trace(fig_omics["data"][i], col=1, row=1)
+    for i in range(len(fig_bimodal["data"])):
+        if i == 0:
+            fig_bimodal['data'][i]["legendgrouptitle_text"] = "Cell type from imaging"
+        subplots_fig.add_trace(fig_bimodal["data"][i], col=2, row=1)
+    for i in range(len(fig_img["data"])):
+        if i == 0:
+            fig_img['data'][i]["legendgrouptitle_text"] = "Cell type from imaging"
+        subplots_fig.add_trace(fig_img["data"][i], col=3, row=1)
+
+    for trace in subplots_fig.data:
+        trace.update(marker_size=6, marker_line_color="white")
+
+    subplots_fig.update_layout(#plot_bgcolor="white",
+                               xaxis1_range=[df_clustering.UMAP1_sc.min() - 1, df_clustering.UMAP1_sc.max() + 1],
+                               xaxis2_range=[df_clustering.UMAP1_bimodal_sc.min() - 1, df_clustering.UMAP1_bimodal_sc.max() + 1],
+                               xaxis3_range=[df_clustering.UMAP1_CP_sc.min() - 1, df_clustering.UMAP1_CP_sc.max() + 1],
+                               yaxis1_range=[df_clustering.UMAP2_sc.min() - 1, df_clustering.UMAP2_sc.max() + 1],
+                               yaxis2_range=[df_clustering.UMAP2_bimodal_sc.min() - 1, df_clustering.UMAP2_bimodal_sc.max() + 1],
+                               yaxis3_range=[df_clustering.UMAP2_CP_sc.min() - 1, df_clustering.UMAP2_CP_sc.max() + 1],
+                               font_size=15,
+                               margin=dict(
+                                   b=30
+                               ))
+
+    subplots_fig.update_xaxes(showgrid=True, showticklabels=False)
+    subplots_fig.update_yaxes(showgrid=True, showticklabels=False)
+
+    names = set()
+    subplots_fig.for_each_trace(
+        lambda trace:
+        trace.update(showlegend=False)
+        if (trace.name in names) else names.add(trace.name))
+
+    return subplots_fig
+
+# Hover data highlight in the 3 clustering callback
+"""
+@app.callback(
+    Output("clustering_sc", "figure", allow_duplicate=True),
+    Input("clustering_sc", "figure"),
+    Input("clustering_sc", "hoverData"),
+    prevent_initial_call=True
+)
+def update_hover_point_pca_clustering(fig, hoverData):
+    if not fig or "data" not in fig:
+        return fig
+
+    hovered_id = None
+    if hoverData and "points" in hoverData and hoverData["points"]:
+        try:
+            hovered_id = hoverData['points'][0]['customdata'][0]
+        except (KeyError, IndexError, TypeError):
+            hovered_id = None
+
+    for scat in fig["data"]:
+        if "customdata" in scat and scat["customdata"]:
+            ids = [x[0] for x in scat["customdata"]]
+
+            # Index du point survolé (si hover actif)
+            idx = -1
+            if hovered_id in ids:
+                idx = ids.index(hovered_id)
+
+            # Réinitialiser tous les points
+            size_array = [12 if j == idx else 6 for j in range(len(scat["x"]))]
+            line_color_array = ['black' if j == idx else 'white' for j in range(len(scat["x"]))]
+
+            # Mise à jour des propriétés
+            scat.setdefault("marker", {})
+            scat["marker"]["size"] = size_array
+            scat["marker"].setdefault("line", {})
+            scat["marker"]["line"]["color"] = line_color_array
+
+    return fig
+"""
+# Cell crop display on hover clustering callback
+@app.callback(
+    Output("cell_display", "children", allow_duplicate=True),
+    [Input('dropdown', 'value'),
+     Input("clustering_sc", "hoverData")],
+    prevent_initial_call=True
+)
+def cell_crop_on_hover_clustering(selected_sample, hoverData):
+    """
+    Display cell crop of sc cages.
+    """
+    if hoverData is None or selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+    mag="20X"
+
+    channel_available = np.unique([c.split("-T")[0] for c in sorted(os.listdir(f"{bigbi_path}/Chips/Chip{chip_ID}/{chip_ID}_images/{mag.lower()}/Cells/Crops/"))])
+    # Fix RGB image in first
+    if "RGB" in channel_available:
+        channel_available = np.delete(channel_available, np.where(channel_available == "RGB")[0])
+        channel_available = np.insert(channel_available, 0, "RGB")
+
+    cage_ID = hoverData["points"][0]["customdata"][0]
+    df_cells_sc = get_single_cells(chip_ID)
+    df_cells_sc.set_index("Cage_ID", inplace=True)
+
+    cell_items = []
+    for channel in channel_available:
+        cell_path = get_cell_crop_path(chip_ID, cage_ID, mag, df_cells_sc, channel)
+        print(cell_path)
+        if os.path.exists(cell_path.replace("Minos_space/", bigbi_path)):
+            cell_items.append(html.Div([
+                html.Div(channel, style={"text-align": "center", "font-size": "12px", "color": "#555"}),
+                html.Img(
+                    src=dash.get_asset_url(cell_path),
+                    alt=f"Image not available (chip {chip_ID}, {seq_ID})",
+                    style={"width": "80px", "margin-bottom": "5px"}
+                )
+            ], style={"margin-right": "10px", "margin-top": "0px", "display": "inline-block", "text-align": "center"}))
+
+    try:
+        if not cell_items:
+            raise Exception
+        return html.Div(cell_items, style={"display": "flex", "justify-content": "center", "align-items": "flex-start"})
+    except Exception as error:
+        print(error)
+        raise PreventUpdate
+
+# UMI scatterplot callback
+@app.callback(Output("scatterplot_UMI_sc", "figure"),
+              [Input("dropdown", "value")])
+def update_scatterplot_UMI_sc(selected_sample):
+    if selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+
+    df_scatter = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.scatter_UMI.tsv", index_col=0)
+    maxi = max(max(df_scatter.H_UMIs_cage), max(df_scatter.M_UMIs_cage))
+
+    fig = go.Figure()
+    hovertemplate = "<b>CageID</b>: %{text}<br /><i>Human UMI count</i>: %{x}<br /><i>Murine UMI count: %{y}"
+    for spe in df_scatter.Cell_type_img.unique():
+        df = df_scatter.query("Cell_type_img==@spe")
+        fig.add_trace(go.Scatter(x=df.H_UMIs_cage, y=df.M_UMIs_cage, name=f"{spe} cage", mode="markers", marker_opacity=0.55, marker_size=4, marker_color=cell_type_colors[spe], text=df.index, hovertemplate=hovertemplate))
+    fig.update_xaxes(range=[-30, maxi + 10], title="Human UMI counts")
+    fig.update_yaxes(range=[-30, maxi + 10], title="Murine UMI counts")
+    fig.update_layout(height=600, width=600, margin=dict(t=10),
+                      legend=dict(
+                        title="Cell type from imaging",
+                        font_size=10,
+                        yanchor="top",
+                        y=0.99,
+                        xanchor="right",
+                        x=0.99,
+                        bgcolor='rgba(0,0,0,0)',
+                     ), xaxis=dict(
+                            tick0=0,
+                            dtick=200,
+                        ),
+                        yaxis=dict(
+                            tick0=0,
+                            dtick=200,
+                        )
+                     )
+    return fig
+
+# Cell crop display on hover scatterplot UMI callback
+@app.callback(
+    Output("cell_display", "children", allow_duplicate=True),
+    [Input('dropdown', 'value'),
+     Input("scatterplot_UMI_sc", "hoverData")],
+    prevent_initial_call=True
+)
+def cell_crop_on_hover_scatterUMI(selected_sample, hoverData):
+    """
+    Display cell crop of sc cages.
+    """
+    if hoverData is None or selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+    mag="20X"
+
+    channel_available = np.unique([c.split("-T")[0] for c in sorted(os.listdir(f"{bigbi_path}/Chips/Chip{chip_ID}/{chip_ID}_images/{mag.lower()}/Cells/Crops/"))])
+    # Fix RGB image in first
+    if "RGB" in channel_available:
+        channel_available = np.delete(channel_available, np.where(channel_available == "RGB")[0])
+        channel_available = np.insert(channel_available, 0, "RGB")
+
+    cage_ID = hoverData["points"][0]["text"]
+    df_cells_sc = get_single_cells(chip_ID)
+    df_cells_sc.set_index("Cage_ID", inplace=True)
+    print(df_cells_sc)
+
+    cell_items = []
+    for channel in channel_available:
+        cell_path = get_cell_crop_path(chip_ID, cage_ID, mag, df_cells_sc, channel)
+        print(cell_path)
+        if os.path.exists(cell_path.replace("Minos_space/", bigbi_path)):
+            cell_items.append(html.Div([
+                html.Div(channel, style={"text-align": "center", "font-size": "12px", "color": "#555"}),
+                html.Img(
+                    src=dash.get_asset_url(cell_path),
+                    alt=f"Image not available (chip {chip_ID}, {seq_ID})",
+                    style={"width": "80px", "margin-bottom": "5px"}
+                )
+            ], style={"margin-right": "10px", "margin-top": "0px", "display": "inline-block", "text-align": "center"}))
+
+    try:
+        if not cell_items:
+            raise Exception
+        return html.Div(cell_items, style={"display": "flex", "justify-content": "center", "align-items": "flex-start"})
+    except Exception as error:
+        print(error)
+        raise PreventUpdate
+
+
+@app.callback(
+    Output('top-n-input', 'style'),
+    Output('threshold-input-container', 'style'),
+    [Input('filter-option-radio', 'value')]
+)
+# Allows to display int input or threshold according to the selected filter option
+def update_filter_input(filter_option):
+    if filter_option == 'top_n':
+        return {'margin-right': '10px'}, {'display': 'none'}
+    elif filter_option == 'threshold':
+        return {'display': 'none'}, {'margin-right': '10px'}
+    return {}, {}
+
+@app.callback(
+    Output('correlation-pairs-dropdown', 'options'),
+    [Input('dropdown', 'value'),
+    Input('features-option-radio', 'value'),
+    Input('filter-option-radio', 'value'),
+    Input('top-n-input', 'value'),
+    Input('threshold-input', 'value')]
+)
+# Get the pair of most correlated variables
+def update_correlation_dropdown(selected_sample, feat_type, filter_option, top_n, threshold):
+    # If any seq is selected, or if cell_type is selected for data type selection but this cell type isn't yet choose, return empty
+    if selected_sample is None:
+        return []
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+
+    corr_matrix = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.correlation_greater_0.3.tsv", index_col=0)
+
+    top_corr_pairs = get_top_correlated_pairs(corr_matrix, filter_option, top_n, threshold, feat_type)
+    top_corr_pairs["Correlation"].astype(float)
+
+    # Add the top correlated pairs into a dropdown list
+    dropdown_options = [
+        {'label': f"{i+1}. {row['Variable1']} ({t1}) " +  " vs " + f"{row['Variable2']} ({t2})" + f" (R: {row['Correlation']:.2f})",
+             'value': f"{row['Variable1']},{row['Variable2']}"}
+            for (i, row), t1, t2 in zip(top_corr_pairs.iterrows(), top_corr_pairs.Variable1_type, top_corr_pairs.Variable2_type)
+        ]
+
+    return dropdown_options
+
+@app.callback(
+    Output('scatter-plot', 'figure'),
+    [Input('correlation-pairs-dropdown', 'value'),
+     Input('dropdown', 'value')]
+)
+# Create the scatter plot of the 2 variables selected from the top correlated pairs
+def update_scatter_plot(correlation_value, selected_sample):
+    # If any seq is selected, or if the top pair isn't yet chosen, return empty
+    if correlation_value is None or selected_sample is None:
+        return {}
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+
+    df_sc = get_single_cells(chip_ID)
+
+    # Get df_count
+    df_count = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.counts.tsv", index_col=0)
+    df_count = df_count.loc[df_count.index != 'Type']
+    print(df_count)
+
+    df_count["Cell_type_img"] = df_sc.set_index("Cage_ID").loc[df_count.index, "Cell_Type"]
+
+    # Get the 2 variables of the selected top correlated pair from the dropdown list
+    var1, var2 = correlation_value.split(',')
+    # Add the coloration of the cages if needed
+    fig = px.scatter(df_count, y=var1, x=var2, opacity=0.5, color="Cell_type_img", color_discrete_map=cell_type_colors, title=f"Correlation scatter plot of {var1} vs {var2}", custom_data=[df_count.index])
+    #fig.update_yaxes(range=[min(df_count[var1].min(), df_count[var2].min()) - 1, max(df_count[var1].max(), df_count[var2].max()) + 1])
+    #fig.update_xaxes(range=[min(df_count[var2].min(), df_count[var1].min()) - 1, max(df_count[var2].max(), df_count[var1].max()) + 1])
+    fig.update_traces(
+        hovertemplate="<b>Cage_ID: %{customdata[0]}</b><br>" +
+                      "%{yaxis.title.text}: %{y}<br>" +
+                      "%{xaxis.title.text}: %{x}<extra></extra>")
+    fig.update_layout(legend=dict(
+        title="Cell type from imaging",
+        font_size=8,
+        yanchor="top",
+        y=0.99,
+        xanchor="left",
+        x=0.01,
+        bgcolor='rgba(0,0,0,0)',
+    ))
+
+    return fig
+
+
+@app.callback(
+    Output("cell_display", "children", allow_duplicate=True),
+    [Input('dropdown', 'value'),
+     Input('correlation-pairs-dropdown', 'value'),
+     Input("scatter-plot", "hoverData")],
+    prevent_initial_call=True
+)
+def cell_crop_on_hover_scatter_plot(selected_sample, correlation_dropdown, hoverData):
+    """
+    Display cell crop of sc cages.
+    """
+    if correlation_dropdown is None or hoverData is None or selected_sample is None:
+        # If no dropdown value or hover data is selected, clear the image.
+        return None
+
+    chip_ID, seq_ID = selected_sample.replace("Chip", "").split("_")
+    mag="20X"
+
+    channel_available = np.unique([c.split("-T")[0] for c in sorted(os.listdir(f"{bigbi_path}/Chips/Chip{chip_ID}/{chip_ID}_images/{mag.lower()}/Cells/Crops/"))])
+    # Fix RGB image in first
+    if "RGB" in channel_available:
+        channel_available = np.delete(channel_available, np.where(channel_available == "RGB")[0])
+        channel_available = np.insert(channel_available, 0, "RGB")
+
+    cage_ID = hoverData["points"][0]["customdata"][0]
+    df_cells_sc = get_single_cells(chip_ID)
+    df_cells_sc.set_index("Cage_ID", inplace=True)
+
+    cell_crops_section = [html.Div("Cell crops:", style={"text-align": "center", "font-size": "12px", "color": "#555"})]
+    for channel in channel_available:
+        cell_path = get_cell_crop_path(chip_ID, cage_ID, mag, df_cells_sc, channel)
+        if os.path.exists(cell_path.replace("Minos_space/", bigbi_path)):
+            cell_crops_section.append(html.Div([
+                html.Div(channel, style={"text-align": "center", "font-size": "12px", "color": "#555"}),
+                html.Img(
+                    src=dash.get_asset_url(cell_path),
+                    alt=f"Image not available (chip {chip_ID}, {seq_ID})",
+                    style={"width": "80px", "margin-bottom": "5px"}
+                )
+            ], style={"margin-right": "10px", "margin-top": "0px", "display": "inline-block", "text-align": "center"}))
+
+    try:
+        if not cell_crops_section:
+            raise Exception
+        return html.Div(cell_crops_section, style={"display": "flex", "flex-wrap": "wrap", "justify-content": "center"})
+    except Exception as error:
+        print(error)
+        raise PreventUpdate
 
 
 if __name__ == '__main__':
