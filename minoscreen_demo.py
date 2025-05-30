@@ -136,7 +136,7 @@ def update_sample_table(selected_sample):
     chip_ID = parts[0]
     seq_ID = parts[1]
     # Read the TSV file
-    df = pd.read_csv(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.MinoScreen_info.tsv", sep='\t', skipfooter=1)  # For now we don't show the UGC (last line of the table)
+    df = pd.read_csv(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.MinoScreen_info.tsv", sep='\t', skiprows=[3, 5])  # For now we only show some info
     # Rename the first column (which has an empty or 'Unnamed: 0' header) to selected sample
     first_col_name = df.columns[0]  # Get the name of the first column
     df = df.rename(columns={first_col_name: selected_sample})
