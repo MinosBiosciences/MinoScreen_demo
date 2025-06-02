@@ -380,7 +380,6 @@ def update_cell_fluo_pairplot(selected_sample):
     # Column indices for fluo intensity
     intensity_cols = [col_name for col_name in df_sc.columns if col_name.startswith("Median_intensity_") and not df_sc[col_name].isna().all()]
     # log transformation
-    df_sc.loc[:, intensity_cols] = df_sc.loc[:, intensity_cols].astype(float)
     df_sc.loc[:, intensity_cols] = np.log10(df_sc.loc[:, intensity_cols])
     # Get all cols
     all_cols = intensity_cols + ["Cage_ID", "Cell_Type"]
