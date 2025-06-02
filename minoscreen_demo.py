@@ -139,7 +139,7 @@ app.layout = html.Div([
 
         # Two cell crops grids side by side on the right
         dbc.Col(html.Div([
-            html.H3("Example cell crops from chip"),
+            html.H3("Example cell crops"),
             html.Div(id="cell_crops_grids")]), width=8)
     ]),
 
@@ -302,8 +302,8 @@ def update_sample_table(selected_sample):
 def update_cells_per_cage(selected_sample):
     parts = selected_sample.replace("Chip", "").split("_")
     chip_ID = parts[0]
-    grid_path_Cy5 = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC-_Cy5+.RGB.best.png")[0]
-    grid_path_FITC = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.cells.species.Grid*FITC+_Cy5-.RGB.best.png")[0]
+    grid_path_Cy5 = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.single_cells.species.Grid_HRamos.RGB.best.png")[0]
+    grid_path_FITC = glob.glob(f"{bigbi_path}Chips/Chip{chip_ID}/{chip_ID}_images/20x/Grids/T0/{chip_ID}.10x10_grid.single_cells.species.Grid_MB3Z.RGB.best.png")[0]
     return [html.Div([html.Img(id="image1", src=app.get_asset_url(grid_path_Cy5.lstrip("assets/")), alt="mesc", style={"width": "100%", "height": "auto", "border": "1px solid #ddd"}),
                       html.P("Ramos cells (Human, Cy5 marker)")], style={"width": "48%", "display": "inline-block", "marginRight": "4%"}),
             html.Div([html.Img(id="image2", src=app.get_asset_url(grid_path_FITC.lstrip("assets/")), style={"width": "100%", "height": "auto", "border": "1px solid #ddd"}),
