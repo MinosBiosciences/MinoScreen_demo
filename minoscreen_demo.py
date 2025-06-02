@@ -182,7 +182,7 @@ app.layout = html.Div([
             html.H3("Feat-feat plot"),
             html.Div(dcc.RadioItems(id='features-option-radio',
                                             options=[
-                                                {'label': ' Genes vs Genes', 'value': 'genes_genes'},
+                                                {'label': ' Genes vs genes', 'value': 'genes_genes'},
                                                 {'label': ' Genes vs imaging features', 'value': 'genes_img'},
                                                 {'label': ' Imaging features: classic vs DL', 'value': 'img_img'}
                                             ],
@@ -704,6 +704,13 @@ def update_correlation_dropdown(selected_sample, feat_type, filter_option, top_n
 
     top_corr_pairs = get_top_correlated_pairs(corr_matrix, filter_option, top_n, threshold, feat_type)
     top_corr_pairs["Correlation"].astype(float)
+    # TMP fix name,to be corrected directly in the file
+    top_corr_pairs.loc[top_corr_pairs.Variable2_type=="Genes", "Variable2_type"] = "gene"
+    top_corr_pairs.loc[top_corr_pairs.Variable1_type == "Genes", "Variable1_type"] = "gene"
+    top_corr_pairs.loc[top_corr_pairs.Variable2_type == "CP features", "Variable2_type"] = "CP feature"
+    top_corr_pairs.loc[top_corr_pairs.Variable1_type == "CP features", "Variable1_type"] = "CP feature"
+    top_corr_pairs.loc[top_corr_pairs.Variable2_type == "DL features", "Variable2_type"] = "DL feature"
+    top_corr_pairs.loc[top_corr_pairs.Variable1_type == "DL features", "Variable1_type"] = "DL feature"
 
     # Add the top correlated pairs into a dropdown list
     dropdown_options = [
@@ -745,7 +752,7 @@ def update_scatter_plot(correlation_value, selected_sample):
     # Get the 2 variables of the selected top correlated pair from the dropdown list
     var1, var2 = correlation_value.split(',')
     # Add the coloration of the cages if needed
-    fig = px.scatter(df_count, y=var1, x=var2, opacity=0.5, color="Cell_type_img", color_discrete_map=cell_type_colors, title=f"Correlation scatter plot of {var1} vs {var2}", custom_data=[df_count.index])
+    fig = px.scatter(df_count, y=var1, x=var2, opacity=0.5, color="Cell_type_img", color_discrete_map=cell_type_colors, title=f"Correlation between<br>{var1} vs {var2}", custom_data=[df_count.index])
     #fig.update_yaxes(range=[min(df_count[var1].min(), df_count[var2].min()) - 1, max(df_count[var1].max(), df_count[var2].max()) + 1])
     #fig.update_xaxes(range=[min(df_count[var2].min(), df_count[var1].min()) - 1, max(df_count[var2].max(), df_count[var1].max()) + 1])
     fig.update_traces(
