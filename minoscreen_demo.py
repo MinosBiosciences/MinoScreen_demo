@@ -225,7 +225,7 @@ app.layout = html.Div([
                               ], id='threshold-input-container', style={'display': 'none'})
                           ], id='filter-input-container'),
                          html.Br(),
-        dcc.Dropdown(id='correlation-pairs-dropdown', placeholder="Select one of the most correlated or anti-correlated pair of variables", style={'font-size': '14px', 'width': '90%', 'margin': '0 auto'}),
+        dcc.Dropdown(id='correlation-pairs-dropdown', placeholder="Select one of the most correlated or anti-correlated pair of variables", style={'font-size': '12px', 'width': '95%', 'margin': '0 auto'}),
         html.Div(dcc.Graph(id='scatter-plot', style={'width': '580px', 'height': '580px'}, clear_on_unhover=True), className='d-flex justify-content-center'),
         ]), width=4),
     ])
@@ -428,8 +428,13 @@ def update_clustering(selected_sample):
     df_clustering.loc[df_clustering.Cell_type_img == "Undetermined_cells", "Cell_type_img"] = "Undetermined"
     df_clustering["ID"] = df_clustering.index
 
-    fig_omics = px.scatter(df_clustering, x="UMAP1_sc", y="UMAP2_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
+    try:
+        fig_omics = px.scatter(df_clustering, x="UMAP1_sc", y="UMAP2_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
                       color_discrete_map=cell_type_colors, category_orders={"Cell_type_img": ["Undetermined", "Mouse", "Human"]})
+    except ValueError:
+        fig_omics = px.scatter(df_clustering, x="UMAP1_sc", y="UMAP2_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
+                               color_discrete_map=cell_type_colors, category_orders={"Cell_type_img": ["Undetermined", "Mouse", "Human"]})
+
     fig_omics.update_traces(hovertemplate="UMAP1: %{x}<br>UMAP2: %{y}<br>Cage_ID: %{customdata[0]}<extra></extra>")
 
     fig_bimodal = px.scatter(df_clustering, x="UMAP1_bimodal_sc", y="UMAP2_bimodal_sc", color="Cell_type_img", opacity=0.7, custom_data=["ID"],
@@ -642,12 +647,10 @@ def cell_crop_on_hover_scatterUMI(selected_sample, hoverData):
     cage_ID = hoverData["points"][0]["text"]
     df_cells_sc = get_single_cells(chip_ID)
     df_cells_sc.set_index("Cage_ID", inplace=True)
-    print(df_cells_sc)
 
     cell_items = []
     for channel in channel_available:
         cell_path = get_cell_crop_path(chip_ID, cage_ID, mag, df_cells_sc, channel)
-        print(cell_path)
         if os.path.exists(cell_path.replace("Minos_space/", bigbi_path)):
             cell_items.append(html.Div([
                 html.Div(channel, style={"text-align": "center", "font-size": "12px", "color": "#555"}),
@@ -703,11 +706,15 @@ def update_correlation_dropdown(selected_sample, feat_type, filter_option, top_n
 
     # Add the top correlated pairs into a dropdown list
     dropdown_options = [
-        {'label': f"{i+1}. {row['Variable1']} ({t1}) " +  " vs " + f"{row['Variable2']} ({t2})" + f" (R: {row['Correlation']:.2f})",
-             'value': f"{row['Variable1']},{row['Variable2']}"}
-            for (i, row), t1, t2 in zip(top_corr_pairs.iterrows(), top_corr_pairs.Variable1_type, top_corr_pairs.Variable2_type)
-        ]
-
+        {
+            'label': f"{i + 1}. {row['Variable1']} ({t1}) vs {row['Variable2']} ({t2})"
+                     + f" (R: {row['Correlation']:.2f}, "
+                     + f"p-value: {np.format_float_scientific(row['P-value'], precision=4) if row['P-value'] >= np.nextafter(0, 1) else '<1e-324'})",
+            'value': f"{row['Variable1']},{row['Variable2']}"
+        }
+        for (i, row), t1, t2 in
+        zip(top_corr_pairs.iterrows(), top_corr_pairs.Variable1_type, top_corr_pairs.Variable2_type)
+    ]
     return dropdown_options
 
 @app.callback(
@@ -730,7 +737,6 @@ def update_scatter_plot(correlation_value, selected_sample):
     # Get df_count
     df_count = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.counts.tsv", index_col=0)
     df_count = df_count.loc[df_count.index != 'Type']
-    print(df_count)
 
     df_count["Cell_type_img"] = df_sc.set_index("Cage_ID").loc[df_count.index, "Cell_Type"]
 
