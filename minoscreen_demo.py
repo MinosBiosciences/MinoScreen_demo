@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 from dash.dependencies import Input, Output
+from dash.exceptions import PreventUpdate
 
 # Setting paths and specific module imports
 # from config import resources_repo_path, title
@@ -138,7 +139,7 @@ app.layout = html.Div([
 
         # Two cell crops grids side by side on the right
         dbc.Col(html.Div([
-            html.H3("Example cell crops"),
+            html.H3("Example cell crops from chip"),
             html.Div(id="cell_crops_grids")]), width=8)
     ]),
 
@@ -379,7 +380,8 @@ def update_cell_fluo_pairplot(selected_sample):
     # Column indices for fluo intensity
     intensity_cols = [col_name for col_name in df_sc.columns if col_name.startswith("Median_intensity_") and not df_sc[col_name].isna().all()]
     # log transformation
-    df_sc.loc[:, intensity_cols] = np.log10(df_sc.loc[:, intensity_cols].astype(float))
+    df_sc.loc[:, intensity_cols] = df_sc.loc[:, intensity_cols].astype(float)
+    df_sc.loc[:, intensity_cols] = np.log10(df_sc.loc[:, intensity_cols])
     # Get all cols
     all_cols = intensity_cols + ["Cage_ID", "Cell_Type"]
     try:
