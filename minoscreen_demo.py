@@ -738,7 +738,7 @@ def update_scatter_plot(correlation_value, selected_sample):
     # Get df_count
     df_count = pd.read_table(f"{bigbi_path}Chips/Chip{chip_ID}/{seq_ID}/{seq_ID}_data/{chip_ID}_{seq_ID}.counts.tsv", index_col=0, dtype=str)
     df_count = df_count.loc[df_count.index != 'Type']
-    df_count = df_count.astype(float)
+    df_count = df_count.astype("float32")
 
     df_count["Cell_type_img"] = df_sc.set_index("Cage_ID").loc[df_count.index, "Cell_Type"]
 
